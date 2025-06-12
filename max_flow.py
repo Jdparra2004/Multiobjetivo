@@ -99,8 +99,12 @@ for i in range(I):
         for k in range(K):
             data.append([fuentes[i], sumideros[j], productos[k], F_opt[i, j, k]])
 
-df = pd.DataFrame(data, columns=columns)
-print(df.pivot_table(index=['Fuente', 'Sumidero'], columns='Producto', values='Flujo (kg)'))
+df = pd.DataFrame(data, columns=['Fuente', 'Sumidero', 'Producto', 'Flujo [kg]'])
+
+# Mostrar como tabla pivoteada
+tabla = df.pivot_table(index=['Fuente', 'Sumidero'], columns='Producto', values='Flujo [kg]')
+print("\n📊 Tabla de flujos óptimos por producto [kg]:")
+print(tabla.round(2))
 
 
 #%% Gráfica por producto y sumidero
@@ -114,23 +118,26 @@ for j in range(J):
         bars = ax.bar(indices + i * ancho, flujos, width=ancho, label=fuentes[i])
         for bar in bars:
             height = bar.get_height()
-            ax.text(bar.get_x() + bar.get_width()/2, height + 50, f'{height:.0f}', 
+            ax.text(bar.get_x() + bar.get_width()/2, height + 50, f'{height:.0f} kg',
                     ha='center', va='bottom', fontsize=9)
 
     ax.set_xticks(indices + ancho)
     ax.set_xticklabels(productos)
-    ax.set_title(f'Flujo hacia {sumideros[j]}')
-    ax.set_ylabel('Flujo (kg)')
+    ax.set_title(f'Flujo hacia {sumideros[j]} [kg]')
+    ax.set_ylabel('Flujo por producto [kg]')
     ax.legend()
     plt.tight_layout()
     plt.show()
 
+
 #%% Resultados finales de interés
 # Flujo total hacia cada sumidero
-print("\n Flujo total hacia cada sumidero:")
+print("\n Flujo total hacia cada sumidero [kg]:")
 for j in range(J):
     flujo_j = np.sum(F_opt[:, j, :])
     print(f"- {sumideros[j]}: {flujo_j:.2f} kg")
 
+
 # Flujo total global
 print(f"\n Flujo total global óptimo (todos los sumideros): {F_total:.2f} kg")
+
