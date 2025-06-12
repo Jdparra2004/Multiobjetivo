@@ -107,21 +107,25 @@ data = []
 for i in range(I):
     for j in range(J):
         for k in range(K):
-            data.append([fuentes[i], sumideros[j], productos[k], F_opt[i, j, k]])
+            flujo = F_opt[i, j, k]
+            if flujo > 1e-2:  # Mostrar solo flujos significativos
+                data.append([fuentes[i], sumideros[j], productos[k], flujo])
 
 df = pd.DataFrame(data, columns=['Fuente', 'Sumidero', 'Producto', 'Flujo [kg]'])
-tabla = df.pivot_table(index=['Fuente', 'Sumidero'], columns='Producto', values='Flujo [kg]')
 
+# Mostrar tabla de flujos
+tabla = df.pivot_table(index=['Fuente', 'Sumidero'], columns='Producto', values='Flujo [kg]')
 print("\n Tabla de flujos óptimos por producto [kg]:")
 print(tabla.round(2))
 
-# Flujo por sumidero
+# Mostrar flujos por sumidero
 print("\n Flujo total hacia cada sumidero [kg]:")
 for j in range(J):
     flujo_j = np.sum(F_opt[:, j, :])
     print(f"- {sumideros[j]}: {flujo_j:.2f} kg")
 
-print(f"\n Flujo total global: {F_total:.2f} kg")
+# Flujo total y costo total
+print(f"\n Flujo total global: {F_total:,.2f} kg")
 print(f" Costo total mínimo: {C_total:,.2f} pesos colombianos")
 
 #Gráficas
