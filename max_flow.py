@@ -111,7 +111,11 @@ for j in range(J):
 
     for i in range(I):
         flujos = [F_opt[i, j, k] for k in range(K)]
-        ax.bar(indices + i * ancho, flujos, width=ancho, label=fuentes[i])
+        bars = ax.bar(indices + i * ancho, flujos, width=ancho, label=fuentes[i])
+        for bar in bars:
+            height = bar.get_height()
+            ax.text(bar.get_x() + bar.get_width()/2, height + 50, f'{height:.0f}', 
+                    ha='center', va='bottom', fontsize=9)
 
     ax.set_xticks(indices + ancho)
     ax.set_xticklabels(productos)
@@ -120,3 +124,13 @@ for j in range(J):
     ax.legend()
     plt.tight_layout()
     plt.show()
+
+#%% Resultados finales de interés
+# Flujo total hacia cada sumidero
+print("\n Flujo total hacia cada sumidero:")
+for j in range(J):
+    flujo_j = np.sum(F_opt[:, j, :])
+    print(f"- {sumideros[j]}: {flujo_j:.2f} kg")
+
+# Flujo total global
+print(f"\n Flujo total global óptimo (todos los sumideros): {F_total:.2f} kg")
