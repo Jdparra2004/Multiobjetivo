@@ -184,6 +184,7 @@ for idx, weights in enumerate(weights_list):
     else:
         print(f"Falló combinación {idx+1}: {res.message}")
 
+#pareto sin filtrar
 fig = plt.figure(figsize=(12, 9))
 ax = fig.add_subplot(111, projection='3d')
 sc = ax.scatter(flows, costs, emissions, 
