@@ -125,7 +125,7 @@ def combined_objective(x, weights):
     )
 
 # Generar diferentes combinaciones de pesos
-n_points = 30
+n_points = 5
 weights_list = []
 for w1 in np.linspace(0, 1, n_points):
     for w2 in np.linspace(0, 1 - w1, n_points):
@@ -139,7 +139,7 @@ results = []
 x0 = np.full(n_vars, 100_000)  # Punto inicial
 
 # Optimizar para cada combinación de pesos
-for weights in weights_list:
+for i, weights in enumerate(weights_list):
     res = minimize(
         combined_objective,
         x0,
@@ -155,6 +155,15 @@ for weights in weights_list:
         cost = total_cost(res.x)
         emissions = total_emissions(res.x)
         results.append((flow, cost, emissions, res.x))
+        
+        print(f"Iteración {i + 1}:")
+        print(f" Pesos: {weights}")
+        print(f" Flujo total: {flow:.4f}")
+        print(f" Costo total: {cost:.4f}")
+        print(f" Emisiones totales: {emissions:.4f}")
+        print()
+    else:
+        print(f"Interación {i + 1} fallo pesos {weights}")
 
 # Convertir a arrays
 results = np.array(results, dtype=object)
@@ -168,9 +177,25 @@ for idx, weights in enumerate(weights_list):
         print(f"Optimizando combinación {idx+1}/{len(weights_list)}: pesos = {weights}")
 
     if res.success:
-        print(f"Éxito en combinación {idx+1}: flujo={flow:.2f}, costo=${cost:,.2f}, emisiones={emissions:.2f}")
+        print(f"Combinación {idx+1}")
+        print(f"flujo {flow}")
+        print(f"costo {cost}")
+        print(f"emisiones {emissions}")
     else:
         print(f"Falló combinación {idx+1}: {res.message}")
+
+fig = plt.figure(figsize=(12, 9))
+ax = fig.add_subplot(111, projection='3d')
+sc = ax.scatter(flows, costs, emissions, 
+                c=emissions, cmap='viridis', s=50)  # Sin filtrar
+ax.set_xlabel('Flujo Total (kg)', fontsize=12)
+ax.set_ylabel('Costo Total (COP)', fontsize=12)
+ax.set_zlabel('Emisiones CO₂ (kg)', fontsize=12)
+ax.set_title('Frente de Pareto - Todas las Soluciones', fontsize=14)
+fig.colorbar(sc, label='Emisiones CO2 (kg)')
+plt.tight_layout()
+plt.show()
+
 
 # =============================
 # 5. FILTRAR FRENTE DE PARETO
@@ -198,6 +223,7 @@ print(f"Total de soluciones pareto-eficientes: {np.sum(pareto_mask)}")
 
 print("Graficando frente de Pareto en 3D...")
 print("Graficando proyecciones 2D del frente de Pareto...")
+
 
 # =============================
 # 6. VISUALIZACIÓN DE RESULTADOS
@@ -257,7 +283,7 @@ def print_solution_stats(x):
     
     print(f"Flujo total: {total_flow:,.2f} kg")
     print(f"Costo total: ${total_cost_val:,.2f} COP")
-    print(f"Emisiones totales: {total_emissions_val:,.2f} kg CO₂")
+    print(f"Emisiones totales: {total_emissions_val:,.2f} kg CO2")
     
     # Composición por destino
     for j in range(2):
