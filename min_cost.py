@@ -94,7 +94,7 @@ def constraints_scenario2():
     return cons
 
 #%% Optimizador
-_vars = I * J * K
+n_vars = I * J * K
 bounds = [(0, None) for _ in range(n_vars)]
 x0 = np.full(n_vars, 100.0)
 
