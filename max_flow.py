@@ -103,7 +103,7 @@ df = pd.DataFrame(data, columns=['Fuente', 'Sumidero', 'Producto', 'Flujo [kg]']
 
 # Mostrar como tabla pivoteada
 tabla = df.pivot_table(index=['Fuente', 'Sumidero'], columns='Producto', values='Flujo [kg]')
-print("\n📊 Tabla de flujos óptimos por producto [kg]:")
+print("\n Tabla de flujos óptimos por producto [kg]:")
 print(tabla.round(2))
 
 
