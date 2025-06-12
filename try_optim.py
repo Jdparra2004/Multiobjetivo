@@ -1,6 +1,7 @@
 import numpy as np
 from scipy.optimize import minimize, Bounds
 import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
 
 # =============================
 # 1. DATOS DEL ESTUDIO DE CASO
@@ -9,179 +10,298 @@ import matplotlib.pyplot as plt
 # Destinos (j): 0=Ibagué, 1=Macaeo
 # Productos (k): 0=plástico, 1=textil, 2=papel
 
-# Capacidades S_ik [kg] (Tabla 1 - Capacidad)
+# Capacidades S_ik [kg] (Tabla 1)
 S_ik = np.array([
-    [1_093_540, 3_390_808, 1_162_721],  # Medellín
-    [15_603_343, 9_468_448, 1_162_721], # Cali
-    [743_932, 1_093_395, 1_162_721]     # Bogotá
+    [1_093_540, 3_390_808, 1_162_721],   # Medellín
+    [15_603_343, 9_468_448, 1_162_721],  # Cali
+    [743_932, 1_093_395, 1_162_721]      # Bogotá
 ])
 
-# Costos de compra C_ik [$/kg] (Tabla 1 - Precios)
+# Costos de compra C_ik [$/kg] (Tabla 1)
 C_ik = np.array([
-    [1291.75, 436.50, 612.00],  # Medellín
-    [1064.38, 485.25, 434.00],  # Cali
-    [1267.63, 466.13, 517.88]   # Bogotá
+    [1291.75, 436.50, 612.00],   # Medellín
+    [1064.38, 485.25, 434.00],   # Cali
+    [1267.63, 466.13, 517.88]    # Bogotá
 ])
 
 # Costos de transporte C_ij [$] (Tabla 4)
 C_ij = np.array([
-    [121476.80, 45366.34],  # Medellín
-    [101076.20, 200257.61], # Cali
-    [75214.76, 157165.18]   # Bogotá
+    [121476.80, 45366.34],   # Medellín
+    [101076.20, 200257.61],  # Cali
+    [75214.76, 157165.18]    # Bogotá
 ])
 
 # Parámetros (Tabla 6)
-eta = [0.50, 0.40, 0.10]    # Composición
-M = 9000                     # Capacidad camión [kg]
-E_k = [200, 240, 100]        # Emisiones CO₂/kg producto
-E_CO2_km = 0.7249            # Emisiones CO₂/km
-F_min = 3_000_000            # Flujo mínimo [kg] (Escenarios 2-3)
+eta = [0.50, 0.40, 0.10]     # Composición fija
+M = 9000                      # Capacidad camión [kg]
+E_k = [200, 240, 100]         # Emisiones CO₂/kg producto
+E_CO2_km = 0.7249             # Emisiones CO₂/km
+F_min = 3_000_000             # Flujo mínimo [kg]
 
 # Precios gasolina G_i [$/galón] (Tabla 5)
 G_i = [9373.21, 9463.97, 9355.07]
 G_C = 25  # Consumo camión [km/galón]
 
-# Calcular emisiones transporte E_ij [kg CO₂] (Ecuación implícita)
+# Calcular distancias d_ij [km] (de Tabla 4)
 d_ij = np.zeros_like(C_ij)
 for i in range(3):
     for j in range(2):
-        d_ij[i,j] = (C_ij[i,j] * G_C) / G_i[i]  # Distancia [km]
-E_ij = d_ij * E_CO2_km  # Emisiones por viaje
+        d_ij[i, j] = (C_ij[i, j] * G_C) / G_i[i]
+
+# Calcular emisiones transporte E_ij [kg CO₂]
+E_ij = d_ij * E_CO2_km
+
+# Número de variables (3 fuentes × 2 destinos × 3 productos)
+n_vars = 3 * 2 * 3
 
 # =============================
-# 2. CONFIGURACIÓN OPTIMIZACIÓN
+# 2. FUNCIONES OBJETIVO
 # =============================
-n_vars = 3 * 2 * 3  # 18 variables (i,j,k)
-bounds = Bounds(0, np.inf)  # F_ijk >= 0
+def total_flow(x):
+    """Flujo total (maximizar)"""
+    return -np.sum(x)  # Negativo para convertir en minimización
 
-# Restricción de capacidad (Ecuación 5)
+def total_cost(x):
+    """Costo total (minimizar)"""
+    flows = x.reshape((3, 2, 3))
+    return np.sum(flows * C_ik[:, None, :]) + np.sum((flows / M) * C_ij[:, :, None])
+
+def total_emissions(x):
+    """Emisiones totales (minimizar)"""
+    flows = x.reshape((3, 2, 3))
+    return np.sum(flows * E_k) + np.sum((flows / M) * E_ij[:, :, None])
+
+# =============================
+# 3. RESTRICCIONES
+# =============================
 def capacity_constraint(x):
-    x = x.reshape((3,2,3))  # [i,j,k]
+    """Restricción de capacidad por fuente y producto"""
+    flows = x.reshape((3, 2, 3))
     constraints = []
     for i in range(3):
         for k in range(3):
-            total_flow = sum(x[i,:,k])
-            constraints.append(S_ik[i,k] - total_flow)
+            total_flow = np.sum(flows[i, :, k])
+            constraints.append(S_ik[i, k] - total_flow)
     return np.array(constraints)
 
-# Restricción de composición (Ecuación 7)
 def composition_constraint(x):
-    x = x.reshape((3,2,3))
+    """Restricción de composición fija por destino"""
+    flows = x.reshape((3, 2, 3))
     constraints = []
     for j in range(2):
-        total_flow_j = np.sum(x[:,j,:])
+        total_flow_j = np.sum(flows[:, j, :])
         for p in range(2):  # Solo primeros p-1 componentes
-            component_flow = sum(x[:,j,p])
+            component_flow = np.sum(flows[:, j, p])
             constraints.append(component_flow - eta[p] * total_flow_j)
     return np.array(constraints)
 
-# Restricción flujo mínimo (Ecuación 6)
 def min_flow_constraint(x):
+    """Restricción de flujo mínimo"""
     return np.sum(x) - F_min
 
-# Función para decodificar solución
-def decode_solution(x):
-    flows = x.reshape((3,2,3))
-    total_flow = np.sum(flows)
-    costs = np.sum(flows * C_ik[:,None,:]) + np.sum((flows/M) * C_ij[:,:,None])
-    emissions = np.sum(flows * E_k) + np.sum((flows/M) * E_ij[:,:,None])
-    return flows, total_flow, costs, emissions
+# Configurar restricciones para SciPy
+constraints = [
+    {'type': 'ineq', 'fun': capacity_constraint},  # S_ik - ΣF_ijk >= 0
+    {'type': 'eq', 'fun': composition_constraint},  # Composición exacta
+    {'type': 'ineq', 'fun': min_flow_constraint}    # Flujo total >= F_min
+]
+
+# Límites de variables (flujos no negativos)
+bounds = Bounds(0, np.inf)  # F_ijk >= 0
 
 # =============================
-# 3. ESCENARIOS DE OPTIMIZACIÓN
+# 4. ENFOQUE SUMA PONDERADA
 # =============================
-def run_scenario(scenario, use_min_flow=False):
-    # Configurar restricciones
-    constraints = [
-        {'type': 'ineq', 'fun': capacity_constraint},
-        {'type': 'eq', 'fun': composition_constraint}
-    ]
-    
-    if use_min_flow:
-        constraints.append({'type': 'ineq', 'fun': min_flow_constraint})
-    
-    # Función objetivo según escenario
-    if scenario == 1:  # Maximizar flujo
-        objective = lambda x: -np.sum(x)  # Negativo para maximizar
-        x0 = np.full(n_vars, 100_000)    # Punto inicial
-    elif scenario == 2:  # Minimizar costo
-        def objective(x):
-            flows = x.reshape((3,2,3))
-            purchase_cost = np.sum(flows * C_ik[:,None,:])
-            transport_cost = np.sum((flows/M) * C_ij[:,:,None])
-            return purchase_cost + transport_cost
-        x0 = np.full(n_vars, 50_000)
-    else:  # Escenario 3: Minimizar emisiones
-        def objective(x):
-            flows = x.reshape((3,2,3))
-            product_emissions = np.sum(flows * E_k)
-            transport_emissions = np.sum((flows/M) * E_ij[:,:,None])
-            return product_emissions + transport_emissions
-        x0 = np.full(n_vars, 50_000)
-    
-    # Optimizar con SLSQP
+def combined_objective(x, weights):
+    """Función objetivo combinada con pesos"""
+    w1, w2, w3 = weights
+    return (
+        w1 * total_flow(x) +
+        w2 * total_cost(x) +
+        w3 * total_emissions(x)
+    )
+
+# Generar diferentes combinaciones de pesos
+n_points = 30
+weights_list = []
+for w1 in np.linspace(0, 1, n_points):
+    for w2 in np.linspace(0, 1 - w1, n_points):
+        w3 = 1 - w1 - w2
+        weights_list.append((w1, w2, w3))
+
+# Almacenar resultados
+results = []
+x0 = np.full(n_vars, 100_000)  # Punto inicial
+
+# Optimizar para cada combinación de pesos
+for weights in weights_list:
     res = minimize(
-        objective,
+        combined_objective,
         x0,
+        args=(weights,),
         method='SLSQP',
         bounds=bounds,
         constraints=constraints,
         options={'maxiter': 500, 'ftol': 1e-6}
     )
     
-    if not res.success:
-        print(f"¡Advertencia! Optimización no convergió: {res.message}")
-    
-    return res
+    if res.success:
+        flow = -total_flow(res.x)  # Convertir a positivo
+        cost = total_cost(res.x)
+        emissions = total_emissions(res.x)
+        results.append((flow, cost, emissions, res.x))
+
+# Convertir a arrays
+results = np.array(results, dtype=object)
+flows = results[:, 0].astype(float)
+costs = results[:, 1].astype(float)
+emissions = results[:, 2].astype(float)
+solutions = np.vstack(results[:, 3])
 
 # =============================
-# 4. EJECUCIÓN Y VISUALIZACIÓN
+# 5. FILTRAR FRENTE DE PARETO
 # =============================
-def print_results(res, scenario):
-    flows, total_flow, costs, emissions = decode_solution(res.x)
-    
-    print(f"\n{'='*50}")
-    print(f"RESULTADOS ESCENARIO {scenario}")
-    print(f"{'='*50}")
-    print(f"• Flujo total: {total_flow:,.2f} kg")
-    
-    if scenario != 1:
-        print(f"• Costo total: ${costs:,.2f} COP")
-        print(f"• Emisiones totales: {emissions:,.2f} kg CO₂")
-    
-    # Imprimir flujos por origen-destino-producto
-    print("\nFLUJOS ÓPTIMOS [kg]:")
-    products = ['Plástico', 'Textil', 'Papel']
-    sources = ['Medellín', 'Cali', 'Bogotá']
-    destinations = ['Ibagué', 'Macaeo']
-    
-    for i in range(3):
-        print(f"\nFuente: {sources[i]}")
-        for j in range(2):
-            print(f"  → Destino: {destinations[j]}")
-            for k in range(3):
-                print(f"    • {products[k]}: {flows[i,j,k]:>10,.2f} kg")
+def is_pareto_efficient(costs):
+    """Identifica soluciones Pareto-eficientes"""
+    is_efficient = np.ones(costs.shape[0], dtype=bool)
+    for i, c in enumerate(costs):
+        if is_efficient[i]:
+            # Dominio: menor costo, menor emisión, mayor flujo
+            is_efficient[is_efficient] = np.any(costs[is_efficient] < c, axis=1) 
+            is_efficient[i] = True
+    return is_efficient
 
-def plot_composition(flows, scenario):
-    plt.figure(figsize=(10, 6))
-    destinations = ['Ibagué', 'Macaeo']
-    products = ['Plástico', 'Textil', 'Papel']
-    colors = ['#FF6B6B', '#4ECDC4', '#FFD166']
+# Juntar objetivos en una matriz
+objectives = np.column_stack([-flows, costs, emissions])  # Convertimos flujo a minimización
+
+# Encontrar soluciones Pareto-eficientes
+pareto_mask = is_pareto_efficient(objectives)
+pareto_flows = flows[pareto_mask]
+pareto_costs = costs[pareto_mask]
+pareto_emissions = emissions[pareto_mask]
+
+# =============================
+# 6. VISUALIZACIÓN DE RESULTADOS
+# =============================
+# 6.1. Frente de Pareto 3D
+fig = plt.figure(figsize=(12, 9))
+ax = fig.add_subplot(111, projection='3d')
+sc = ax.scatter(pareto_flows, pareto_costs, pareto_emissions, 
+                c=pareto_emissions, cmap='viridis', s=50)
+
+ax.set_xlabel('Flujo Total (kg)', fontsize=12)
+ax.set_ylabel('Costo Total (COP)', fontsize=12)
+ax.set_zlabel('Emisiones CO₂ (kg)', fontsize=12)
+ax.set_title('Frente de Pareto - Soluciones Óptimas', fontsize=14)
+fig.colorbar(sc, label='Emisiones CO₂ (kg)')
+plt.tight_layout()
+plt.savefig('pareto_front_3d.png', dpi=300)
+plt.show()
+
+# 6.2. Proyecciones 2D
+fig, ax = plt.subplots(1, 3, figsize=(18, 6))
+
+# Flujo vs Costo
+ax[0].scatter(pareto_flows, pareto_costs, c='green', alpha=0.7)
+ax[0].set_xlabel('Flujo Total (kg)')
+ax[0].set_ylabel('Costo Total (COP)')
+ax[0].set_title('Compromiso Flujo-Costo')
+ax[0].grid(True)
+
+# Flujo vs Emisiones
+ax[1].scatter(pareto_flows, pareto_emissions, c='red', alpha=0.7)
+ax[1].set_xlabel('Flujo Total (kg)')
+ax[1].set_ylabel('Emisiones CO₂ (kg)')
+ax[1].set_title('Compromiso Flujo-Emisiones')
+ax[1].grid(True)
+
+# Costo vs Emisiones
+ax[2].scatter(pareto_costs, pareto_emissions, c='blue', alpha=0.7)
+ax[2].set_xlabel('Costo Total (COP)')
+ax[2].set_ylabel('Emisiones CO₂ (kg)')
+ax[2].set_title('Compromiso Costo-Emisiones')
+ax[2].grid(True)
+
+plt.tight_layout()
+plt.savefig('pareto_front_2d.png', dpi=300)
+plt.show()
+
+# =============================
+# 7. ANÁLISIS DE SOLUCIONES CLAVE
+# =============================
+def print_solution_stats(x):
+    """Imprime estadísticas de una solución"""
+    flows = x.reshape((3, 2, 3))
+    total_flow = np.sum(flows)
+    total_cost_val = total_cost(x)
+    total_emissions_val = total_emissions(x)
+    
+    print(f"Flujo total: {total_flow:,.2f} kg")
+    print(f"Costo total: ${total_cost_val:,.2f} COP")
+    print(f"Emisiones totales: {total_emissions_val:,.2f} kg CO₂")
+    
+    # Composición por destino
+    for j in range(2):
+        total_j = np.sum(flows[:, j, :])
+        comp_plastic = np.sum(flows[:, j, 0]) / total_j
+        comp_textil = np.sum(flows[:, j, 1]) / total_j
+        comp_paper = np.sum(flows[:, j, 2]) / total_j
+        
+        print(f"\nDestino {j+1} - Composición:")
+        print(f"  Plástico: {comp_plastic*100:.2f}%")
+        print(f"  Textil: {comp_textil*100:.2f}%")
+        print(f"  Papel: {comp_paper*100:.2f}%")
+
+# Encontrar soluciones extremas
+min_cost_idx = np.argmin(pareto_costs)
+min_emissions_idx = np.argmin(pareto_emissions)
+max_flow_idx = np.argmax(pareto_flows)
+
+print("="*50)
+print("SOLUCIÓN DE MÍNIMO COSTO")
+print("="*50)
+print_solution_stats(solutions[pareto_mask][min_cost_idx])
+
+print("\n" + "="*50)
+print("SOLUCIÓN DE MÍNIMAS EMISIONES")
+print("="*50)
+print_solution_stats(solutions[pareto_mask][min_emissions_idx])
+
+print("\n" + "="*50)
+print("SOLUCIÓN DE MÁXIMO FLUJO")
+print("="*50)
+print_solution_stats(solutions[pareto_mask][max_flow_idx])
+
+# =============================
+# 8. VISUALIZACIÓN DE FLUJOS
+# =============================
+def plot_flows(x, title):
+    """Visualiza los flujos óptimos"""
+    flows = x.reshape((3, 2, 3))
+    fig, ax = plt.subplots(1, 2, figsize=(15, 6))
+    
+    destinos = ['Ibagué', 'Macaeo']
+    productos = ['Plástico', 'Textil', 'Papel']
+    colores = ['#FF6B6B', '#4ECDC4', '#FFD166']
     
     for j in range(2):
-        plt.subplot(1, 2, j+1)
-        comp = [np.sum(flows[:,j,k]) for k in range(3)]
-        plt.pie(comp, labels=products, autopct='%1.1f%%', colors=colors)
-        plt.title(f'Composición en {destinations[j]}\n(Escenario {scenario})')
+        bottom = np.zeros(3)
+        for i in range(3):
+            ax[j].bar(productos, flows[i, j], bottom=bottom, 
+                    label=f'Fuente {i+1}', color=colores[i])
+            bottom += flows[i, j]
+        
+        ax[j].set_title(f'Flujos a {destinos[j]}')
+        ax[j].set_ylabel('Cantidad (kg)')
+        ax[j].legend()
+        ax[j].grid(axis='y', linestyle='--', alpha=0.7)
     
+    plt.suptitle(title, fontsize=14)
     plt.tight_layout()
-    plt.savefig(f'composicion_escenario_{scenario}.png')
+    plt.savefig(f'flujos_{title.lower().replace(" ", "_")}.png', dpi=300)
     plt.show()
 
-# Ejecutar todos los escenarios
-for scenario in [1, 2, 3]:
-    use_min_flow = (scenario != 1)
-    res = run_scenario(scenario, use_min_flow)
-    print_results(res, scenario)
-    flows, _, _, _ = decode_solution(res.x)
-    plot_composition(flows, scenario)
+# Graficar soluciones clave
+plot_flows(solutions[pareto_mask][min_cost_idx], "Mínimo Costo")
+plot_flows(solutions[pareto_mask][min_emissions_idx], "Mínimas Emisiones")
+plot_flows(solutions[pareto_mask][max_flow_idx], "Máximo Flujo")
