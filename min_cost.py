@@ -18,28 +18,26 @@ S_ik = np.array([
     [233.37, 138.41, 243.92]
 ])
 
-# Composición fija [%]
-eta = np.array([0.5, 0.4, 0.1])
+# Composición deseada del RDF (η)
+eta = np.array([0.5, 0.4, 0.1])  # plástico, textil, papel
 
-# Costo de producto por kg [$]
+# Costo del producto por kg [$]
 C_ik = np.array([
     [1291.75, 436.50, 612.00],
     [1064.38, 485.25, 434.00],
     [1267.63, 466.13, 517.88]
 ])
 
-# Costo de transporte [$]
+# Costo de transporte [$] desde i a j
 C_ij = np.array([
     [121476.80, 45366.34],    # Medellín
     [101076.20, 200257.61],   # Cali
     [75214.76, 157165.18]     # Bogotá
 ])
 
-# Capacidad del camión
-M = 9000  # [kg]
-
-# Flujo mínimo
-F_min = 3_000_000  # [kg]
+# Parámetros adicionales
+M = 9000              # Capacidad camión [kg]
+F_min = 3_000_000     # Flujo mínimo [kg]
 
 #%%  Funciones auxiliares
 def idx(i, j, k):
@@ -60,37 +58,30 @@ def cost_function(F_flat):
 
 #%% Restricciones
 
-def constraints():
+def build_constraints():
     cons = []
 
-    # Restricción 1: disponibilidad
+    # 1. Disponibilidad: flujo saliente por producto ≤ disponibilidad
     for i in range(I):
         for k in range(K):
-            cons.append({
-                'type': 'ineq',
-                'fun': lambda F, i=i, k=k: S_ik[i, k] - sum(F[idx(i, j, k)] for j in range(J))
-            })
+            def restr_disp(F, i=i, k=k):
+                return S_ik[i, k] - sum(F[idx(i, j, k)] for j in range(J))
+            cons.append({'type': 'ineq', 'fun': restr_disp})
 
-    # Restricción 2: composición fija
+    # 2. Composición fija en cada sumidero (K - 1 restricciones por j)
     for j in range(J):
-        total_flow = lambda F: sum(F[idx(i, j, k)] for i in range(I) for k in range(K))
-        for p in range(K - 1):  # solo K-1 restricciones independientes
-            left = lambda F, j=j, p=p: sum(F[idx(i, j, p)] for i in range(I))
-            right = lambda F, j=j, p=p: eta[p] * total_flow(F)
-            cons.append({
-                'type': 'eq',
-                'fun': lambda F, j=j, p=p: left(F, j, p) - right(F, j, p)
-            })
+        for p in range(K - 1):  # solo K-1 independientes
+            def restr_comp(F, j=j, p=p):
+                total_j = sum(F[idx(i, j, k)] for i in range(I) for k in range(K))
+                comp_p = sum(F[idx(i, j, p)] for i in range(I))
+                return comp_p - eta[p] * total_j
+            cons.append({'type': 'eq', 'fun': restr_comp})
 
-    return cons
+    # 3. Flujo mínimo global
+    def restr_fmin(F):
+        return np.sum(F) - F_min
+    cons.append({'type': 'ineq', 'fun': restr_fmin})
 
-# Añadimos la restricción del flujo mínimo
-def constraints_scenario2():
-    cons = constraints()
-    cons.append({
-        'type': 'ineq',
-        'fun': lambda F: np.sum(F) - F_min
-    })
     return cons
 
 #%% Optimizador
@@ -98,26 +89,26 @@ n_vars = I * J * K
 bounds = [(0, None) for _ in range(n_vars)]
 x0 = np.full(n_vars, 100.0)
 
-result2 = minimize(
+result = minimize(
     fun=cost_function,
     x0=x0,
     bounds=bounds,
-    constraints=constraints_scenario2(),
+    constraints=build_constraints(),
     method='SLSQP',
     options={'disp': True, 'maxiter': 1000}
 )
 
 #%% Resultados}
-F_opt2 = reshape_F(result2.x)
-F_total2 = np.sum(F_opt2)
-C_total2 = cost_function(result2.x)
+F_opt = reshape_F(result.x)
+F_total = np.sum(F_opt)
+C_total = cost_function(result.x)
 
 # Tabla de resultados
 data = []
 for i in range(I):
     for j in range(J):
         for k in range(K):
-            data.append([fuentes[i], sumideros[j], productos[k], F_opt2[i, j, k]])
+            data.append([fuentes[i], sumideros[j], productos[k], F_opt[i, j, k]])
 
 df = pd.DataFrame(data, columns=['Fuente', 'Sumidero', 'Producto', 'Flujo [kg]'])
 tabla = df.pivot_table(index=['Fuente', 'Sumidero'], columns='Producto', values='Flujo [kg]')
@@ -128,11 +119,11 @@ print(tabla.round(2))
 # Flujo por sumidero
 print("\n Flujo total hacia cada sumidero [kg]:")
 for j in range(J):
-    flujo_j = np.sum(F_opt2[:, j, :])
+    flujo_j = np.sum(F_opt[:, j, :])
     print(f"- {sumideros[j]}: {flujo_j:.2f} kg")
 
-print(f"\n Flujo total global: {F_total2:.2f} kg")
-print(f" Costo total mínimo: {C_total2:,.2f} pesos colombianos")
+print(f"\n Flujo total global: {F_total:.2f} kg")
+print(f" Costo total mínimo: {C_total:,.2f} pesos colombianos")
 
 #Gráficas
 for j in range(J):
@@ -141,7 +132,7 @@ for j in range(J):
     indices = np.arange(K)
 
     for i in range(I):
-        flujos = [F_opt2[i, j, k] for k in range(K)]
+        flujos = [F_opt[i, j, k] for k in range(K)]
         bars = ax.bar(indices + i * ancho, flujos, width=ancho, label=fuentes[i])
         for bar in bars:
             height = bar.get_height()
