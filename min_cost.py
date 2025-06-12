@@ -86,8 +86,8 @@ def build_constraints():
 
 #%% Optimizador
 n_vars = I * J * K
-bounds = [(0, None) for _ in range(n_vars)]
 x0 = np.full(n_vars, 100.0)
+bounds = [(0, None)] * n_vars
 
 result = minimize(
     fun=cost_function,
@@ -97,7 +97,6 @@ result = minimize(
     method='SLSQP',
     options={'disp': True, 'maxiter': 1000}
 )
-
 #%% Resultados}
 F_opt = reshape_F(result.x)
 F_total = np.sum(F_opt)
