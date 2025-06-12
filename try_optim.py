@@ -52,8 +52,7 @@ for i in range(3):
 E_ij = d_ij * E_CO2_km
 
 print("Distancias calculadas (d_ij) [km]:\n", d_ij)
-print("Emisiones por transporte (E_ij) [kg CO₂]:\n", E_ij)
-
+print("Emisiones por transporte (E_ij) [kg CO2]:\n", E_ij)
 
 # Número de variables (3 fuentes × 2 destinos × 3 productos)
 n_vars = 3 * 2 * 3
@@ -169,9 +168,9 @@ for idx, weights in enumerate(weights_list):
         print(f"Optimizando combinación {idx+1}/{len(weights_list)}: pesos = {weights}")
 
     if res.success:
-        print(f"✔ Éxito en combinación {idx+1}: flujo={flow:.2f}, costo=${cost:,.2f}, emisiones={emissions:.2f}")
+        print(f"Éxito en combinación {idx+1}: flujo={flow:.2f}, costo=${cost:,.2f}, emisiones={emissions:.2f}")
     else:
-        print(f"✘ Falló combinación {idx+1}: {res.message}")
+        print(f"Falló combinación {idx+1}: {res.message}")
 
 # =============================
 # 5. FILTRAR FRENTE DE PARETO
