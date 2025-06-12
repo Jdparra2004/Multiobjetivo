@@ -120,18 +120,18 @@ df = pd.DataFrame(data, columns=['Fuente', 'Sumidero', 'Producto', 'Flujo [kg]']
 
 # Mostrar tabla
 tabla = df.pivot_table(index=['Fuente', 'Sumidero'], columns='Producto', values='Flujo [kg]')
-print("\n📊 Tabla de flujos óptimos por producto [kg]:")
+print("\n Tabla de flujos óptimos por producto [kg]:")
 print(tabla.round(2))
 
 # Flujo por sumidero
-print("\n📌 Flujo total hacia cada sumidero [kg]:")
+print("\n Flujo total hacia cada sumidero [kg]:")
 for j in range(J):
     flujo_j = np.sum(F_opt[:, j, :])
     print(f"- {sumideros[j]}: {flujo_j:.2f} kg")
 
 # Totales
-print(f"\n✅ Flujo total global: {F_total:,.2f} kg")
-print(f"🌱 Emisión total mínima: {E_total:,.2f} kg CO2")
+print(f"\n Flujo total global: {F_total:,.2f} kg")
+print(f" Emisión total mínima: {E_total:,.2f} kg CO2")
 
 # GRÁFICAS
 
