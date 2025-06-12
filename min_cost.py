@@ -61,23 +61,23 @@ def cost_function(F_flat):
 def build_constraints():
     cons = []
 
-    # 1. Disponibilidad: flujo saliente por producto ≤ disponibilidad
+    # Restricción 1: Disponibilidad por fuente y producto
     for i in range(I):
         for k in range(K):
             def restr_disp(F, i=i, k=k):
                 return S_ik[i, k] - sum(F[idx(i, j, k)] for j in range(J))
             cons.append({'type': 'ineq', 'fun': restr_disp})
 
-    # 2. Composición fija en cada sumidero (K - 1 restricciones por j)
+    # Restricción 2: Composición exacta por sumidero
     for j in range(J):
-        for p in range(K - 1):  # solo K-1 independientes
-            def restr_comp(F, j=j, p=p):
-                total_j = sum(F[idx(i, j, k)] for i in range(I) for k in range(K))
+        total_F_j = lambda F, j=j: sum(F[idx(i, j, k)] for i in range(I) for k in range(K))
+        for p in range(K - 1):  # Solo K-1 restricciones independientes
+            def restr_eta(F, j=j, p=p):
                 comp_p = sum(F[idx(i, j, p)] for i in range(I))
-                return comp_p - eta[p] * total_j
-            cons.append({'type': 'eq', 'fun': restr_comp})
+                return comp_p - eta[p] * total_F_j(F, j)
+            cons.append({'type': 'eq', 'fun': restr_eta})
 
-    # 3. Flujo mínimo global
+    # Restricción 3: Flujo total mínimo
     def restr_fmin(F):
         return np.sum(F) - F_min
     cons.append({'type': 'ineq', 'fun': restr_fmin})
