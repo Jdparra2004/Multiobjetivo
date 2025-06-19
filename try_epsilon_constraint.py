@@ -60,17 +60,17 @@ n_vars = 3 * 2 * 3
 # =============================
 # 2. FUNCIONES OBJETIVO
 # =============================
-def total_flow(x):
-    """Flujo total (maximizar)"""
-    return -np.sum(x)  # Negativo para convertir en minimización
+def objective_flow(x):
+    """Maximizar flujo total (convertido a minimización)"""
+    return -np.sum(x)
 
-def total_cost(x):
-    """Costo total (minimizar)"""
+def objective_cost(x):
+    """Minimizar costo total"""
     flows = x.reshape((3, 2, 3))
     return np.sum(flows * C_ik[:, None, :]) + np.sum((flows / M) * C_ij[:, :, None])
 
-def total_emissions(x):
-    """Emisiones totales (minimizar)"""
+def objective_emissions(x):
+    """Minimizar emisiones totales"""
     flows = x.reshape((3, 2, 3))
     return np.sum(flows * E_k) + np.sum((flows / M) * E_ij[:, :, None])
 
@@ -115,182 +115,196 @@ bounds = Bounds(0, np.inf)  # F_ijk >= 0
 # =============================
 # 4. ENFOQUE SUMA PONDERADA
 # =============================
-def combined_objective(x, weights):
-    """Función objetivo combinada con pesos"""
-    w1, w2, w3 = weights
-    return (
-        w1 * total_flow(x) +
-        w2 * total_cost(x) +
-        w3 * total_emissions(x)
-    )
-
-# Generar diferentes combinaciones de pesos
-n_points = 10
-weights_list = []
-for w1 in np.linspace(0, 1, n_points):
-    for w2 in np.linspace(0, 1 - w1, n_points):
-        w3 = 1 - w1 - w2
-        weights_list.append((w1, w2, w3))
-
-print(f"Número total de combinaciones de pesos: {len(weights_list)}")
-
-# Almacenar resultados
-results = []
-x0 = np.full(n_vars, 100_000)  # Punto inicial
-
-# Optimizar para cada combinación de pesos
-for i, weights in enumerate(weights_list):
-    if i % 50 == 0 or i == 0 or i == len(weights_list)-1:
-        print(f"Optimizando combinación {i+1}/{len(weights_list)}: pesos = {weights}")
+def optimize_with_epsilon_constraint(main_obj, epsilon_values, other_obj_bounds):
+    """
+    Optimiza con método ε-constraint
     
-    res = minimize(
-        combined_objective,
-        x0,
-        args=(weights,),
-        method='SLSQP',
-        bounds=bounds,
-        constraints=constraints,
-        options={'maxiter': 500, 'ftol': 1e-6}
-    )
+    Args:
+        main_obj: Función objetivo principal a optimizar
+        epsilon_values: Lista de valores ε para otros objetivos
+        other_obj_bounds: Tupla con (min, max) de los otros objetivos
+    """
+    results = []
+    x0 = np.full(n_vars, 100_000)  # Punto inicial
     
-    if res.success:
-        flow = -total_flow(res.x)  # Convertir a positivo
-        cost = total_cost(res.x)
-        emissions = total_emissions(res.x)
-        results.append((flow, cost, emissions, res.x))
+    # Generar valores ε para cada objetivo secundario
+    eps_cost = np.linspace(other_obj_bounds[0][0], other_obj_bounds[0][1], epsilon_values)
+    eps_emissions = np.linspace(other_obj_bounds[1][0], other_obj_bounds[1][1], epsilon_values)
+    
+    # Optimizar para cada combinación de ε
+    for i, (eps_c, eps_e) in enumerate(zip(eps_cost, eps_emissions)):
+        print(f"\nOptimizando con ε-constraints: Costo ≤ {eps_c:,.2f}, Emisiones ≤ {eps_e:,.2f}")
         
-        # Mostrar resultados para esta combinación
-        if i % 50 == 0 or i == 0 or i == len(weights_list)-1:
-            print(f"  Flujo total: {flow:.2f} kg")
-            print(f"  Costo total: ${cost:,.2f} COP")
-            print(f"  Emisiones totales: {emissions:,.2f} kg CO2")
-            print()
-    else:
-        print(f"  Falló con pesos {weights}: {res.message}")
-
-# Convertir a arrays
-results = np.array(results, dtype=object)
-flows = results[:, 0].astype(float)
-costs = results[:, 1].astype(float)
-emissions = results[:, 2].astype(float)
-solutions = np.vstack(results[:, 3])
-
-print(f"\nTotal de soluciones obtenidas: {len(flows)}")
-
-# =============================
-# 4.1. Visualización 3D - TODAS LAS SOLUCIONES SIN FILTRAR
-# =============================
-fig = plt.figure(figsize=(12, 9))
-ax = fig.add_subplot(111, projection='3d')
-
-sc = ax.scatter(flows, costs, emissions, c=emissions, cmap='viridis', s=40)
-
-ax.set_xlabel('Flujo Total (kg)', fontsize=12)
-ax.set_ylabel('Costo Total (COP)', fontsize=12)
-ax.set_zlabel('Emisiones CO₂ (kg)', fontsize=12)
-ax.set_title('Espacio de Soluciones - Sin Filtrar', fontsize=14)
-fig.colorbar(sc, label='Emisiones CO₂ (kg)')
-plt.tight_layout()
-plt.savefig('espacio_sin_filtrar.png', dpi=300)
-plt.show()
+        # Añadir restricciones ε
+        additional_constraints = [
+            {'type': 'ineq', 'fun': lambda x: eps_c - objective_cost(x)},  # Costo ≤ ε_c
+            {'type': 'ineq', 'fun': lambda x: eps_e - objective_emissions(x)}  # Emisiones ≤ ε_e
+        ]
+        
+        all_constraints = constraints + additional_constraints
+        
+        res = minimize(
+            main_obj,
+            x0,
+            method='SLSQP',
+            bounds=bounds,
+            constraints=all_constraints,
+            options={'maxiter': 1000, 'ftol': 1e-6}
+        )
+        
+        if res.success:
+            flow = -main_obj(res.x) if main_obj == objective_flow else np.sum(res.x)
+            cost = objective_cost(res.x)
+            emissions = objective_emissions(res.x)
+            results.append((flow, cost, emissions, res.x))
+            
+            print(f"  → Solución encontrada:")
+            print(f"     Flujo: {flow:,.2f} kg")
+            print(f"     Costo: ${cost:,.2f} COP")
+            print(f"     Emisiones: {emissions:,.2f} kg CO₂")
+        else:
+            print(f"  → No se encontró solución factible para estos ε-constraints")
+    
+    return np.array(results, dtype=object)
 
 # =============================
-# 5. FILTRAR FRENTE DE PARETO
+# 5. EJECUCIÓN DE LOS TRES ESCENARIOS ε-CONSTRAINT
 # =============================
-def is_pareto_efficient(costs):
-    """Identifica soluciones Pareto-eficientes"""
-    is_efficient = np.ones(costs.shape[0], dtype=bool)
-    for i, c in enumerate(costs):
-        if is_efficient[i]:
-            # Dominio: menor costo, menor emisión, mayor flujo
-            is_efficient[is_efficient] = np.any(costs[is_efficient] < c, axis=1) 
-            is_efficient[i] = True
-    return is_efficient
+# Primero necesitamos estimar los rangos de los objetivos
+print("\nEstimando rangos de objetivos para definir ε-constraints...")
 
-# Juntar objetivos en una matriz
-objectives = np.column_stack([-flows, costs, emissions])  # Convertimos flujo a minimización
+# Optimizar cada objetivo individualmente para obtener límites
+print("\n1. Optimizando para máximo flujo...")
+res_flow = minimize(
+    objective_flow,
+    np.full(n_vars, 100_000),
+    method='SLSQP',
+    bounds=bounds,
+    constraints=constraints,
+    options={'maxiter': 500, 'ftol': 1e-6}
+)
+max_flow = -res_flow.fun if res_flow.success else 35_000_000  # Valor por defecto si falla
 
-# Encontrar soluciones Pareto-eficientes
-pareto_mask = is_pareto_efficient(objectives)
-pareto_flows = flows[pareto_mask]
-pareto_costs = costs[pareto_mask]
-pareto_emissions = emissions[pareto_mask]
-pareto_solutions = solutions[pareto_mask]
+print("\n2. Optimizando para mínimo costo...")
+res_cost = minimize(
+    objective_cost,
+    np.full(n_vars, 100_000),
+    method='SLSQP',
+    bounds=bounds,
+    constraints=constraints,
+    options={'maxiter': 500, 'ftol': 1e-6}
+)
+min_cost = res_cost.fun if res_cost.success else 2_000_000_000  # Valor por defecto si falla
+max_cost = objective_cost(res_flow.x)  # Costo en solución de máximo flujo
 
-print(f"\nTotal de soluciones Pareto-eficientes: {np.sum(pareto_mask)}")
-print(f"Flujo mínimo: {np.min(pareto_flows):,.2f} kg")
-print(f"Flujo máximo: {np.max(pareto_flows):,.2f} kg")
-print(f"Costo mínimo: ${np.min(pareto_costs):,.2f}")
-print(f"Costo máximo: ${np.max(pareto_costs):,.2f}")
-print(f"Emisiones mínimas: {np.min(pareto_emissions):,.2f} kg CO^2")
-print(f"Emisiones máximas: {np.max(pareto_emissions):,.2f} kg CO^2")
+print("\n3. Optimizando para mínimas emisiones...")
+res_emissions = minimize(
+    objective_emissions,
+    np.full(n_vars, 100_000),
+    method='SLSQP',
+    bounds=bounds,
+    constraints=constraints,
+    options={'maxiter': 500, 'ftol': 1e-6}
+)
+min_emissions = res_emissions.fun if res_emissions.success else 5_000_000  # Valor por defecto si falla
+max_emissions = objective_emissions(res_flow.x)  # Emisiones en solución de máximo flujo
+
+print("\nRangos estimados:")
+print(f"- Flujo: {F_min:,.0f} - {max_flow:,.0f} kg")
+print(f"- Costo: ${min_cost:,.0f} - ${max_cost:,.0f} COP")
+print(f"- Emisiones: {min_emissions:,.0f} - {max_emissions:,.0f} kg CO₂")
+
+# Definir número de puntos ε
+n_epsilon = 15
+
+# Escenario 1: Maximizar flujo con ε en costo y emisiones
+print("\n\nESCENARIO 1: Maximizar flujo con ε-constraints en costo y emisiones")
+results_flow = optimize_with_epsilon_constraint(
+    main_obj=objective_flow,
+    epsilon_values=n_epsilon,
+    other_obj_bounds=[(min_cost, max_cost), (min_emissions, max_emissions)]
+)
+
+# Escenario 2: Minimizar costo con ε en flujo y emisiones
+print("\n\nESCENARIO 2: Minimizar costo con ε-constraints en flujo y emisiones")
+results_cost = optimize_with_epsilon_constraint(
+    main_obj=objective_cost,
+    epsilon_values=n_epsilon,
+    other_obj_bounds=[(F_min, max_flow), (min_emissions, max_emissions)]
+)
+
+# Escenario 3: Minimizar emisiones con ε en flujo y costo
+print("\n\nESCENARIO 3: Minimizar emisiones con ε-constraints en flujo y costo")
+results_emissions = optimize_with_epsilon_constraint(
+    main_obj=objective_emissions,
+    epsilon_values=n_epsilon,
+    other_obj_bounds=[(F_min, max_flow), (min_cost, max_cost)]
+)
+
+# Combinar todos los resultados
+all_results = np.concatenate([results_flow, results_cost, results_emissions])
+flows = all_results[:, 0].astype(float)
+costs = all_results[:, 1].astype(float)
+emissions = all_results[:, 2].astype(float)
+solutions = np.vstack(all_results[:, 3])
 
 # =============================
-# 6. VISUALIZACIÓN DE TODAS LAS SOLUCIONES (ANTES DE FILTRAR)
+# 6. VISUALIZACIÓN DE RESULTADOS ε-CONSTRAINT
 # =============================
-print("\nVISUALIZANDO TODAS LAS SOLUCIONES OBTENIDAS (ANTES DE FILTRAR PARETO)")
+print("\nVISUALIZANDO RESULTADOS DEL MÉTODO ε-CONSTRAINT")
 
 # 6.1. Gráfico 3D de todas las soluciones
 fig = plt.figure(figsize=(12, 9))
 ax = fig.add_subplot(111, projection='3d')
 
-# Graficar todas las soluciones (no filtradas)
-sc_all = ax.scatter(flows, costs, emissions, 
-                c='gray', alpha=0.5, s=30, 
-                label='Todas las soluciones')
-
-# Graficar soluciones Pareto-eficientes (si existen)
-if len(pareto_flows) > 0:
-    sc_pareto = ax.scatter(pareto_flows, pareto_costs, pareto_emissions, 
-                        c='blue', s=50, 
-                        label='Soluciones Pareto-eficientes')
+# Color por escenario
+colors = ['blue']*len(results_flow) + ['green']*len(results_cost) + ['red']*len(results_emissions)
+ax.scatter(flows, costs, emissions, c=colors, s=40, alpha=0.7)
 
 ax.set_xlabel('Flujo Total (kg)', fontsize=12)
 ax.set_ylabel('Costo Total (COP)', fontsize=12)
-ax.set_zlabel('Emisiones CO^2 (kg)', fontsize=12)
-ax.set_title('Todas las Soluciones Obtenidas', fontsize=14)
-ax.legend()
+ax.set_zlabel('Emisiones CO₂ (kg)', fontsize=12)
+ax.set_title('Soluciones por Método ε-Constraint\nAzul:MaxFlujo, Verde:MinCosto, Rojo:MinEmisiones', fontsize=14)
 plt.tight_layout()
-plt.savefig('todas_soluciones_3d.png', dpi=300)
+plt.savefig('epsilon_constraint_3d.png', dpi=300)
 plt.show()
 
-# 6.2. Proyecciones 2D de todas las soluciones
+# 6.2. Proyecciones 2D
 fig, ax = plt.subplots(1, 3, figsize=(18, 6))
 
-# Flujo vs Costo (todas las soluciones)
-ax[0].scatter(flows, costs, c='gray', alpha=0.5, s=30, label='Todas')
-if len(pareto_flows) > 0:
-    ax[0].scatter(pareto_flows, pareto_costs, c='blue', s=40, label='Pareto')
+# Flujo vs Costo
+ax[0].scatter(results_flow[:, 0], results_flow[:, 1], c='blue', alpha=0.7, label='Max Flujo')
+ax[0].scatter(results_cost[:, 0], results_cost[:, 1], c='green', alpha=0.7, label='Min Costo')
+ax[0].scatter(results_emissions[:, 0], results_emissions[:, 1], c='red', alpha=0.7, label='Min Emisiones')
 ax[0].set_xlabel('Flujo Total (kg)')
 ax[0].set_ylabel('Costo Total (COP)')
-ax[0].set_title('Flujo vs Costo (Todas las soluciones)')
+ax[0].set_title('Flujo vs Costo')
 ax[0].grid(True)
 ax[0].legend()
 
-# Flujo vs Emisiones (todas las soluciones)
-ax[1].scatter(flows, emissions, c='gray', alpha=0.5, s=30, label='Todas')
-if len(pareto_flows) > 0:
-    ax[1].scatter(pareto_flows, pareto_emissions, c='blue', s=40, label='Pareto')
+# Flujo vs Emisiones
+ax[1].scatter(results_flow[:, 0], results_flow[:, 2], c='blue', alpha=0.7, label='Max Flujo')
+ax[1].scatter(results_cost[:, 0], results_cost[:, 2], c='green', alpha=0.7, label='Min Costo')
+ax[1].scatter(results_emissions[:, 0], results_emissions[:, 2], c='red', alpha=0.7, label='Min Emisiones')
 ax[1].set_xlabel('Flujo Total (kg)')
-ax[1].set_ylabel('Emisiones CO^2 (kg)')
-ax[1].set_title('Flujo vs Emisiones (Todas las soluciones)')
+ax[1].set_ylabel('Emisiones CO₂ (kg)')
+ax[1].set_title('Flujo vs Emisiones')
 ax[1].grid(True)
 ax[1].legend()
 
-# Costo vs Emisiones (todas las soluciones)
-ax[2].scatter(costs, emissions, c='gray', alpha=0.5, s=30, label='Todas')
-if len(pareto_flows) > 0:
-    ax[2].scatter(pareto_costs, pareto_emissions, c='blue', s=40, label='Pareto')
+# Costo vs Emisiones
+ax[2].scatter(results_flow[:, 1], results_flow[:, 2], c='blue', alpha=0.7, label='Max Flujo')
+ax[2].scatter(results_cost[:, 1], results_cost[:, 2], c='green', alpha=0.7, label='Min Costo')
+ax[2].scatter(results_emissions[:, 1], results_emissions[:, 2], c='red', alpha=0.7, label='Min Emisiones')
 ax[2].set_xlabel('Costo Total (COP)')
-ax[2].set_ylabel('Emisiones CO^2 (kg)')
-ax[2].set_title('Costo vs Emisiones (Todas las soluciones)')
+ax[2].set_ylabel('Emisiones CO₂ (kg)')
+ax[2].set_title('Costo vs Emisiones')
 ax[2].grid(True)
 ax[2].legend()
 
 plt.tight_layout()
-plt.savefig('todas_soluciones_2d.png', dpi=300)
+plt.savefig('epsilon_constraint_2d.png', dpi=300)
 plt.show()
-
 # =============================
 # 7. ANÁLISIS DE SOLUCIONES CLAVE
 # =============================
@@ -359,43 +373,47 @@ def plot_composition(x, title):
     plt.savefig(f'composicion_{title.lower().replace(" ", "_")}.png', dpi=300)
     plt.show()
 
-# Encontrar soluciones extremas y representativas
+# Identificar soluciones no dominadas (Pareto) de todos los resultados
+objectives = np.column_stack([-flows, costs, emissions])  # Convertimos flujo a minimización
+pareto_mask = is_pareto_efficient(objectives)
+pareto_flows = flows[pareto_mask]
+pareto_costs = costs[pareto_mask]
+pareto_emissions = emissions[pareto_mask]
+pareto_solutions = solutions[pareto_mask]
+
+print(f"\nTotal de soluciones ε-constraint: {len(flows)}")
+print(f"Soluciones Pareto-eficientes encontradas: {len(pareto_flows)}")
+
+# Análisis de soluciones Pareto-eficientes
 if len(pareto_flows) > 0:
-    # Soluciones extremas
+    # Encontrar soluciones extremas
     min_cost_idx = np.argmin(pareto_costs)
     min_emissions_idx = np.argmin(pareto_emissions)
     max_flow_idx = np.argmax(pareto_flows)
     
-    # Solución balanceada (punto medio)
+    # Solución balanceada
     normalized = (objectives[pareto_mask] - objectives[pareto_mask].min(axis=0)) / \
                 (objectives[pareto_mask].max(axis=0) - objectives[pareto_mask].min(axis=0))
     balanced_idx = np.argmin(np.linalg.norm(normalized - 0.5, axis=1))
     
-    # Análisis de soluciones
-    print_solution_stats(solutions[pareto_mask][min_cost_idx], "Mínimo Costo")
-    plot_composition(solutions[pareto_mask][min_cost_idx], "Mínimo Costo")
+    # Mostrar resultados
+    print_solution_stats(pareto_solutions[min_cost_idx], "Mínimo Costo (Pareto)")
+    plot_composition(pareto_solutions[min_cost_idx], "Mínimo Costo (Pareto)")
     
-    print_solution_stats(solutions[pareto_mask][min_emissions_idx], "Mínimas Emisiones")
-    plot_composition(solutions[pareto_mask][min_emissions_idx], "Mínimas Emisiones")
+    print_solution_stats(pareto_solutions[min_emissions_idx], "Mínimas Emisiones (Pareto)")
+    plot_composition(pareto_solutions[min_emissions_idx], "Mínimas Emisiones (Pareto)")
     
-    print_solution_stats(solutions[pareto_mask][max_flow_idx], "Máximo Flujo")
-    plot_composition(solutions[pareto_mask][max_flow_idx], "Máximo Flujo")
+    print_solution_stats(pareto_solutions[max_flow_idx], "Máximo Flujo (Pareto)")
+    plot_composition(pareto_solutions[max_flow_idx], "Máximo Flujo (Pareto)")
     
-    print_solution_stats(solutions[pareto_mask][balanced_idx], "Solución Balanceada")
-    plot_composition(solutions[pareto_mask][balanced_idx], "Solución Balanceada")
+    print_solution_stats(pareto_solutions[balanced_idx], "Solución Balanceada (Pareto)")
+    plot_composition(pareto_solutions[balanced_idx], "Solución Balanceada (Pareto)")
     
-    # Tabla comparativa
-    print("\n" + "="*60)
-    print("COMPARATIVA DE SOLUCIONES CLAVE")
-    print("="*60)
-    print(f"{'':<20} | {'Flujo (kg)':>15} | {'Costo (COP)':>15} | {'Emisiones (kg CO^2)':>20}")
-    print("-"*80)
-    print(f"{'Mínimo Costo':<20} | {pareto_costs[min_cost_idx]:>15,.0f} | {pareto_costs[min_cost_idx]:>15,.0f} | {pareto_emissions[min_cost_idx]:>20,.0f}")
-    print(f"{'Mínimas Emisiones':<20} | {pareto_flows[min_emissions_idx]:>15,.0f} | {pareto_costs[min_emissions_idx]:>15,.0f} | {pareto_emissions[min_emissions_idx]:>20,.0f}")
-    print(f"{'Máximo Flujo':<20} | {pareto_flows[max_flow_idx]:>15,.0f} | {pareto_costs[max_flow_idx]:>15,.0f} | {pareto_emissions[max_flow_idx]:>20,.0f}")
-    print(f"{'Solución Balanceada':<20} | {pareto_flows[balanced_idx]:>15,.0f} | {pareto_costs[balanced_idx]:>15,.0f} | {pareto_emissions[balanced_idx]:>20,.0f}")
-else:
-    print("\nNo se encontraron soluciones Pareto-eficientes para analizar")
+    # Visualizar flujos
+    plot_flows(pareto_solutions[min_cost_idx], "Mínimo Costo (Pareto)")
+    plot_flows(pareto_solutions[min_emissions_idx], "Mínimas Emisiones (Pareto)")
+    plot_flows(pareto_solutions[max_flow_idx], "Máximo Flujo (Pareto)")
+    plot_flows(pareto_solutions[balanced_idx], "Solución Balanceada (Pareto)")
 
 # =============================
 # 8. VISUALIZACIÓN DE FLUJOS (Mejorada)
