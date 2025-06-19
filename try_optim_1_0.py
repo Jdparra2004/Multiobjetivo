@@ -140,6 +140,9 @@ x0 = np.full(n_vars, 100_000)  # Punto inicial
 
 # Optimizar para cada combinación de pesos
 for i, weights in enumerate(weights_list):
+    if i % 50 == 0 or i == 0 or i == len(weights_list)-1:
+        print(f"Optimizando combinación {i+1}/{len(weights_list)}: pesos = {weights}")
+    
     res = minimize(
         combined_objective,
         x0,
@@ -156,14 +159,14 @@ for i, weights in enumerate(weights_list):
         emissions = total_emissions(res.x)
         results.append((flow, cost, emissions, res.x))
         
-        print(f"Iteración {i + 1}:")
-        print(f" Pesos: {weights}")
-        print(f" Flujo total: {flow:.4f}")
-        print(f" Costo total: {cost:.4f}")
-        print(f" Emisiones totales: {emissions:.4f}")
-        print()
+        # Mostrar resultados para esta combinación
+        if i % 50 == 0 or i == 0 or i == len(weights_list)-1:
+            print(f"  Flujo total: {flow:.2f} kg")
+            print(f"  Costo total: ${cost:,.2f} COP")
+            print(f"  Emisiones totales: {emissions:,.2f} kg CO2")
+            print()
     else:
-        print(f"Interación {i + 1} fallo pesos {weights}: {res.message}")
+        print(f"  Falló con pesos {weights}: {res.message}")
 
 # Convertir a arrays
 results = np.array(results, dtype=object)
@@ -172,7 +175,7 @@ costs = results[:, 1].astype(float)
 emissions = results[:, 2].astype(float)
 solutions = np.vstack(results[:, 3])
 
-print(f"Total de soluciones obtenidas: {len(flows)}")
+print(f"\nTotal de soluciones obtenidas: {len(flows)}")
 
 # =============================
 # 4.1. Visualización 3D - TODAS LAS SOLUCIONES SIN FILTRAR
@@ -192,37 +195,35 @@ plt.savefig('espacio_sin_filtrar.png', dpi=300)
 plt.show()
 
 # =============================
-# 5. FILTRAR FRENTE DE PARETO (CORREGIDO)
+# 5. FILTRAR FRENTE DE PARETO
 # =============================
 def is_pareto_efficient(costs):
-    """Identifica soluciones Pareto-eficientes CORREGIDO"""
+    """Identifica soluciones Pareto-eficientes"""
     is_efficient = np.ones(costs.shape[0], dtype=bool)
     for i, c in enumerate(costs):
         if is_efficient[i]:
-            # Encontrar todas las soluciones que dominan a c
-            dominated = np.all(costs <= c, axis=1) & np.any(costs < c, axis=1)
-            is_efficient[dominated] = False
+            # Dominio: menor costo, menor emisión, mayor flujo
+            is_efficient[is_efficient] = np.any(costs[is_efficient] < c, axis=1) 
+            is_efficient[i] = True
     return is_efficient
 
-# Convertir objetivos a minimización (flujo se convierte en negativo)
-objectives = np.column_stack([-flows, costs, emissions])
-
-# Normalizar objetivos para manejar diferentes escalas
-max_vals = np.max(objectives, axis=0)
-min_vals = np.min(objectives, axis=0)
-objectives_normalized = (objectives - min_vals) / (max_vals - min_vals)
+# Juntar objetivos en una matriz
+objectives = np.column_stack([-flows, costs, emissions])  # Convertimos flujo a minimización
 
 # Encontrar soluciones Pareto-eficientes
-pareto_mask = is_pareto_efficient(objectives_normalized)
+pareto_mask = is_pareto_efficient(objectives)
 pareto_flows = flows[pareto_mask]
 pareto_costs = costs[pareto_mask]
 pareto_emissions = emissions[pareto_mask]
 pareto_solutions = solutions[pareto_mask]
 
-print(f"Total de soluciones pareto-eficientes: {np.sum(pareto_mask)}")
-print(f"Rango de flujos: {np.min(pareto_flows):,.0f} - {np.max(pareto_flows):,.0f} kg")
-print(f"Rango de costos: {np.min(pareto_costs):,.0f} - {np.max(pareto_costs):,.0f} COP")
-print(f"Rango de emisiones: {np.min(pareto_emissions):,.0f} - {np.max(pareto_emissions):,.0f} kg CO2")
+print(f"\nTotal de soluciones Pareto-eficientes: {np.sum(pareto_mask)}")
+print(f"Flujo mínimo: {np.min(pareto_flows):,.2f} kg")
+print(f"Flujo máximo: {np.max(pareto_flows):,.2f} kg")
+print(f"Costo mínimo: ${np.min(pareto_costs):,.2f}")
+print(f"Costo máximo: ${np.max(pareto_costs):,.2f}")
+print(f"Emisiones mínimas: {np.min(pareto_emissions):,.2f} kg CO2")
+print(f"Emisiones máximas: {np.max(pareto_emissions):,.2f} kg CO2")
 
 # =============================
 # 6. VISUALIZACIÓN DE RESULTADOS
@@ -246,28 +247,25 @@ plt.show()
 fig, ax = plt.subplots(1, 3, figsize=(18, 6))
 
 # Flujo vs Costo
-sc1 = ax[0].scatter(pareto_flows, pareto_costs, c=pareto_emissions, cmap='viridis', alpha=0.7)
+ax[0].scatter(pareto_flows, pareto_costs, c='green', alpha=0.7)
 ax[0].set_xlabel('Flujo Total (kg)')
 ax[0].set_ylabel('Costo Total (COP)')
 ax[0].set_title('Compromiso Flujo-Costo')
 ax[0].grid(True)
-fig.colorbar(sc1, ax=ax[0], label='Emisiones CO₂ (kg)')
 
 # Flujo vs Emisiones
-sc2 = ax[1].scatter(pareto_flows, pareto_emissions, c=pareto_costs, cmap='plasma', alpha=0.7)
+ax[1].scatter(pareto_flows, pareto_emissions, c='red', alpha=0.7)
 ax[1].set_xlabel('Flujo Total (kg)')
 ax[1].set_ylabel('Emisiones CO₂ (kg)')
 ax[1].set_title('Compromiso Flujo-Emisiones')
 ax[1].grid(True)
-fig.colorbar(sc2, ax=ax[1], label='Costo Total (COP)')
 
 # Costo vs Emisiones
-sc3 = ax[2].scatter(pareto_costs, pareto_emissions, c=pareto_flows, cmap='cool', alpha=0.7)
+ax[2].scatter(pareto_costs, pareto_emissions, c='blue', alpha=0.7)
 ax[2].set_xlabel('Costo Total (COP)')
 ax[2].set_ylabel('Emisiones CO₂ (kg)')
 ax[2].set_title('Compromiso Costo-Emisiones')
 ax[2].grid(True)
-fig.colorbar(sc3, ax=ax[2], label='Flujo Total (kg)')
 
 plt.tight_layout()
 plt.savefig('pareto_front_2d.png', dpi=300)
@@ -304,7 +302,7 @@ min_cost_idx = np.argmin(pareto_costs)
 min_emissions_idx = np.argmin(pareto_emissions)
 max_flow_idx = np.argmax(pareto_flows)
 
-print("="*50)
+print("\n" + "="*50)
 print("SOLUCIÓN DE MÍNIMO COSTO")
 print("="*50)
 print_solution_stats(pareto_solutions[min_cost_idx])
