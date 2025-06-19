@@ -222,8 +222,8 @@ print(f"Flujo mínimo: {np.min(pareto_flows):,.2f} kg")
 print(f"Flujo máximo: {np.max(pareto_flows):,.2f} kg")
 print(f"Costo mínimo: ${np.min(pareto_costs):,.2f}")
 print(f"Costo máximo: ${np.max(pareto_costs):,.2f}")
-print(f"Emisiones mínimas: {np.min(pareto_emissions):,.2f} kg CO2")
-print(f"Emisiones máximas: {np.max(pareto_emissions):,.2f} kg CO2")
+print(f"Emisiones mínimas: {np.min(pareto_emissions):,.2f} kg CO^2")
+print(f"Emisiones máximas: {np.max(pareto_emissions):,.2f} kg CO^2")
 
 # =============================
 # 6. VISUALIZACIÓN DE TODAS LAS SOLUCIONES (ANTES DE FILTRAR)
@@ -247,7 +247,7 @@ if len(pareto_flows) > 0:
 
 ax.set_xlabel('Flujo Total (kg)', fontsize=12)
 ax.set_ylabel('Costo Total (COP)', fontsize=12)
-ax.set_zlabel('Emisiones CO₂ (kg)', fontsize=12)
+ax.set_zlabel('Emisiones CO^2 (kg)', fontsize=12)
 ax.set_title('Todas las Soluciones Obtenidas', fontsize=14)
 ax.legend()
 plt.tight_layout()
@@ -272,7 +272,7 @@ ax[1].scatter(flows, emissions, c='gray', alpha=0.5, s=30, label='Todas')
 if len(pareto_flows) > 0:
     ax[1].scatter(pareto_flows, pareto_emissions, c='blue', s=40, label='Pareto')
 ax[1].set_xlabel('Flujo Total (kg)')
-ax[1].set_ylabel('Emisiones CO₂ (kg)')
+ax[1].set_ylabel('Emisiones CO^2 (kg)')
 ax[1].set_title('Flujo vs Emisiones (Todas las soluciones)')
 ax[1].grid(True)
 ax[1].legend()
@@ -282,7 +282,7 @@ ax[2].scatter(costs, emissions, c='gray', alpha=0.5, s=30, label='Todas')
 if len(pareto_flows) > 0:
     ax[2].scatter(pareto_costs, pareto_emissions, c='blue', s=40, label='Pareto')
 ax[2].set_xlabel('Costo Total (COP)')
-ax[2].set_ylabel('Emisiones CO₂ (kg)')
+ax[2].set_ylabel('Emisiones CO^2 (kg)')
 ax[2].set_title('Costo vs Emisiones (Todas las soluciones)')
 ax[2].grid(True)
 ax[2].legend()
@@ -304,9 +304,9 @@ def print_solution_stats(x, title=""):
     print("\n" + "="*60)
     print(f"ANÁLISIS DETALLADO - {title.upper()}")
     print("="*60)
-    print(f"► Flujo total: {total_flow:,.2f} kg")
-    print(f"► Costo total: ${total_cost_val:,.2f} COP")
-    print(f"► Emisiones totales: {total_emissions_val:,.2f} kg CO₂")
+    print(f"Flujo total: {total_flow:,.2f} kg")
+    print(f"Costo total: ${total_cost_val:,.2f} COP")
+    print(f"Emisiones totales: {total_emissions_val:,.2f} kg CO^2")
     
     # Análisis por destino
     for j in range(2):
@@ -316,24 +316,24 @@ def print_solution_stats(x, title=""):
         # Composición porcentual
         comp = [np.sum(flows[:, j, k]) / total_j for k in range(3)]
         print("  Composición:")
-        print(f"    • Plástico: {comp[0]*100:.2f}%")
-        print(f"    • Textil: {comp[1]*100:.2f}%")
-        print(f"    • Papel: {comp[2]*100:.2f}%")
+        print(f"Plástico: {comp[0]*100:.2f}%")
+        print(f"Textil: {comp[1]*100:.2f}%")
+        print(f"Papel: {comp[2]*100:.2f}%")
         
         # Contribución por fuente
-        print("\n  Contribución por fuente:")
+        print("\nContribución por fuente:")
         for i in range(3):
             source_contrib = np.sum(flows[i, j, :]) / total_j * 100
             print(f"    Fuente {i+1}: {source_contrib:.2f}%")
 
     # Análisis por fuente
-    print("\n► Utilización de capacidades por fuente:")
+    print("\nUtilización de capacidades por fuente:")
     for i in range(3):
         utilization = [np.sum(flows[i, :, k]) / S_ik[i, k] * 100 for k in range(3)]
         print(f"  Fuente {i+1}:")
-        print(f"    • Plástico: {utilization[0]:.2f}% de capacidad")
-        print(f"    • Textil: {utilization[1]:.2f}% de capacidad")
-        print(f"    • Papel: {utilization[2]:.2f}% de capacidad")
+        print(f"Plástico: {utilization[0]:.2f}% de capacidad")
+        print(f"Textil: {utilization[1]:.2f}% de capacidad")
+        print(f"Papel: {utilization[2]:.2f}% de capacidad")
 
 # Función para graficar composición
 def plot_composition(x, title):
@@ -351,7 +351,7 @@ def plot_composition(x, title):
         
         # Gráfico de torta
         ax[j].pie(composicion, labels=productos, autopct=lambda p: f'{p:.1f}%\n({p*total/100:,.0f} kg)',
-                 colors=colores, startangle=90)
+                colors=colores, startangle=90)
         ax[j].set_title(f'Composición en Destino {j+1}\nTotal: {total:,.0f} kg')
     
     plt.suptitle(f'Composición del Combustible - {title}', fontsize=14)
@@ -388,7 +388,7 @@ if len(pareto_flows) > 0:
     print("\n" + "="*60)
     print("COMPARATIVA DE SOLUCIONES CLAVE")
     print("="*60)
-    print(f"{'':<20} | {'Flujo (kg)':>15} | {'Costo (COP)':>15} | {'Emisiones (kg CO₂)':>20}")
+    print(f"{'':<20} | {'Flujo (kg)':>15} | {'Costo (COP)':>15} | {'Emisiones (kg CO^2)':>20}")
     print("-"*80)
     print(f"{'Mínimo Costo':<20} | {pareto_costs[min_cost_idx]:>15,.0f} | {pareto_costs[min_cost_idx]:>15,.0f} | {pareto_emissions[min_cost_idx]:>20,.0f}")
     print(f"{'Mínimas Emisiones':<20} | {pareto_flows[min_emissions_idx]:>15,.0f} | {pareto_costs[min_emissions_idx]:>15,.0f} | {pareto_emissions[min_emissions_idx]:>20,.0f}")
