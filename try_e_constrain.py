@@ -90,7 +90,7 @@ for ef in eps_flows:
         ])
 
         res = minimize(total_cost, x0, method='SLSQP', bounds=bounds, constraints=constr,
-                       options={'disp': False, 'maxiter': 500})
+                    options={'disp': False, 'maxiter': 500})
 
         if res.success:
             flow = total_flow(res.x)
