@@ -185,6 +185,25 @@ for idx, weights in enumerate(weights_list):
         print(f"Falló combinación {idx+1}: {res.message}")
 
 # =============================
+# 4.1. Visualización 3D - TODAS LAS SOLUCIONES SIN FILTRAR
+# =============================
+
+fig = plt.figure(figsize=(12, 9))
+ax = fig.add_subplot(111, projection='3d')
+
+sc = ax.scatter(flows, costs, emissions, c=emissions, cmap='viridis', s=40)
+
+ax.set_xlabel('Flujo Total (kg)', fontsize=12)
+ax.set_ylabel('Costo Total (COP)', fontsize=12)
+ax.set_zlabel('Emisiones CO₂ (kg)', fontsize=12)
+ax.set_title('Espacio de Soluciones - Sin Filtrar', fontsize=14)
+fig.colorbar(sc, label='Emisiones CO₂ (kg)')
+plt.tight_layout()
+plt.savefig('espacio_sin_filtrar.png', dpi=300)
+plt.show()
+
+
+# =============================
 # 5. FILTRAR FRENTE DE PARETO
 # =============================
 def is_pareto_efficient(costs):
