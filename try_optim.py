@@ -184,20 +184,6 @@ for idx, weights in enumerate(weights_list):
     else:
         print(f"Falló combinación {idx+1}: {res.message}")
 
-#pareto sin filtrar
-fig = plt.figure(figsize=(12, 9))
-ax = fig.add_subplot(111, projection='3d')
-sc = ax.scatter(flows, costs, emissions, 
-                c=emissions, cmap='viridis', s=50)  # Sin filtrar
-ax.set_xlabel('Flujo Total (kg)', fontsize=12)
-ax.set_ylabel('Costo Total (COP)', fontsize=12)
-ax.set_zlabel('Emisiones CO₂ (kg)', fontsize=12)
-ax.set_title('Frente de Pareto - Todas las Soluciones', fontsize=14)
-fig.colorbar(sc, label='Emisiones CO2 (kg)')
-plt.tight_layout()
-plt.show()
-
-
 # =============================
 # 5. FILTRAR FRENTE DE PARETO
 # =============================
@@ -229,19 +215,23 @@ print("Graficando proyecciones 2D del frente de Pareto...")
 # =============================
 # 6. VISUALIZACIÓN DE RESULTADOS
 # =============================
-# 6.1. Frente de Pareto 3D
 fig = plt.figure(figsize=(12, 9))
 ax = fig.add_subplot(111, projection='3d')
-sc = ax.scatter(pareto_flows, pareto_costs, pareto_emissions, 
-                c=pareto_emissions, cmap='viridis', s=50)
+
+# Todas las soluciones (gris o azul claro)
+ax.scatter(flows, costs, emissions, c='lightgray', s=30, label='Todas las soluciones')
+
+# Solo las pareto-eficientes (resaltadas en rojo)
+ax.scatter(pareto_flows, pareto_costs, pareto_emissions,
+        c='red', s=50, label='Pareto eficientes')
 
 ax.set_xlabel('Flujo Total (kg)', fontsize=12)
 ax.set_ylabel('Costo Total (COP)', fontsize=12)
 ax.set_zlabel('Emisiones CO₂ (kg)', fontsize=12)
-ax.set_title('Frente de Pareto - Soluciones Óptimas', fontsize=14)
-fig.colorbar(sc, label='Emisiones CO₂ (kg)')
+ax.set_title('Frente de Pareto - Todas las soluciones', fontsize=14)
+ax.legend()
 plt.tight_layout()
-plt.savefig('pareto_front_3d.png', dpi=300)
+plt.savefig('pareto_front_combined.png', dpi=300)
 plt.show()
 
 # 6.2. Proyecciones 2D
