@@ -125,7 +125,7 @@ def combined_objective(x, weights):
     )
 
 # Generar diferentes combinaciones de pesos
-n_points = 5
+n_points = 10
 weights_list = []
 for w1 in np.linspace(0, 1, n_points):
     for w2 in np.linspace(0, 1 - w1, n_points):
@@ -294,79 +294,152 @@ plt.show()
 # =============================
 # 7. ANÁLISIS DE SOLUCIONES CLAVE
 # =============================
-def print_solution_stats(x):
-    """Imprime estadísticas de una solución"""
+def print_solution_stats(x, title=""):
+    """Imprime estadísticas detalladas de una solución"""
     flows = x.reshape((3, 2, 3))
     total_flow = np.sum(flows)
     total_cost_val = total_cost(x)
     total_emissions_val = total_emissions(x)
     
-    print(f"Flujo total: {total_flow:,.2f} kg")
-    print(f"Costo total: ${total_cost_val:,.2f} COP")
-    print(f"Emisiones totales: {total_emissions_val:,.2f} kg CO2")
+    print("\n" + "="*60)
+    print(f"ANÁLISIS DETALLADO - {title.upper()}")
+    print("="*60)
+    print(f"► Flujo total: {total_flow:,.2f} kg")
+    print(f"► Costo total: ${total_cost_val:,.2f} COP")
+    print(f"► Emisiones totales: {total_emissions_val:,.2f} kg CO₂")
     
-    # Composición por destino
+    # Análisis por destino
     for j in range(2):
         total_j = np.sum(flows[:, j, :])
-        comp_plastic = np.sum(flows[:, j, 0]) / total_j
-        comp_textil = np.sum(flows[:, j, 1]) / total_j
-        comp_paper = np.sum(flows[:, j, 2]) / total_j
+        print(f"\nDestino {j+1} - Total: {total_j:,.2f} kg")
         
-        print(f"\nDestino {j+1} - Composición:")
-        print(f"  Plástico: {comp_plastic*100:.2f}%")
-        print(f"  Textil: {comp_textil*100:.2f}%")
-        print(f"  Papel: {comp_paper*100:.2f}%")
+        # Composición porcentual
+        comp = [np.sum(flows[:, j, k]) / total_j for k in range(3)]
+        print("  Composición:")
+        print(f"    • Plástico: {comp[0]*100:.2f}%")
+        print(f"    • Textil: {comp[1]*100:.2f}%")
+        print(f"    • Papel: {comp[2]*100:.2f}%")
+        
+        # Contribución por fuente
+        print("\n  Contribución por fuente:")
+        for i in range(3):
+            source_contrib = np.sum(flows[i, j, :]) / total_j * 100
+            print(f"    Fuente {i+1}: {source_contrib:.2f}%")
 
-# Encontrar soluciones extremas
-min_cost_idx = np.argmin(pareto_costs)
-min_emissions_idx = np.argmin(pareto_emissions)
-max_flow_idx = np.argmax(pareto_flows)
+    # Análisis por fuente
+    print("\n► Utilización de capacidades por fuente:")
+    for i in range(3):
+        utilization = [np.sum(flows[i, :, k]) / S_ik[i, k] * 100 for k in range(3)]
+        print(f"  Fuente {i+1}:")
+        print(f"    • Plástico: {utilization[0]:.2f}% de capacidad")
+        print(f"    • Textil: {utilization[1]:.2f}% de capacidad")
+        print(f"    • Papel: {utilization[2]:.2f}% de capacidad")
 
-print("\n" + "="*50)
-print("SOLUCIÓN DE MÍNIMO COSTO")
-print("="*50)
-print_solution_stats(pareto_solutions[min_cost_idx])
-
-print("\n" + "="*50)
-print("SOLUCIÓN DE MÍNIMAS EMISIONES")
-print("="*50)
-print_solution_stats(pareto_solutions[min_emissions_idx])
-
-print("\n" + "="*50)
-print("SOLUCIÓN DE MÁXIMO FLUJO")
-print("="*50)
-print_solution_stats(pareto_solutions[max_flow_idx])
-
-# =============================
-# 8. VISUALIZACIÓN DE FLUJOS
-# =============================
-def plot_flows(x, title):
-    """Visualiza los flujos óptimos"""
+# Función para graficar composición
+def plot_composition(x, title):
+    """Grafica la composición por destino"""
     flows = x.reshape((3, 2, 3))
     fig, ax = plt.subplots(1, 2, figsize=(15, 6))
     
-    destinos = ['Ibagué', 'Macaeo']
     productos = ['Plástico', 'Textil', 'Papel']
     colores = ['#FF6B6B', '#4ECDC4', '#FFD166']
     
     for j in range(2):
-        bottom = np.zeros(3)
-        for i in range(3):
-            ax[j].bar(productos, flows[i, j], bottom=bottom, 
-                    label=f'Fuente {i+1}', color=colores[i])
-            bottom += flows[i, j]
+        # Datos para el gráfico de torta
+        composicion = [np.sum(flows[:, j, k]) for k in range(3)]
+        total = sum(composicion)
         
-        ax[j].set_title(f'Flujos a {destinos[j]}')
-        ax[j].set_ylabel('Cantidad (kg)')
-        ax[j].legend()
-        ax[j].grid(axis='y', linestyle='--', alpha=0.7)
+        # Gráfico de torta
+        ax[j].pie(composicion, labels=productos, autopct=lambda p: f'{p:.1f}%\n({p*total/100:,.0f} kg)',
+                 colors=colores, startangle=90)
+        ax[j].set_title(f'Composición en Destino {j+1}\nTotal: {total:,.0f} kg')
     
-    plt.suptitle(title, fontsize=14)
+    plt.suptitle(f'Composición del Combustible - {title}', fontsize=14)
     plt.tight_layout()
-    plt.savefig(f'flujos_{title.lower().replace(" ", "_")}.png', dpi=300)
+    plt.savefig(f'composicion_{title.lower().replace(" ", "_")}.png', dpi=300)
     plt.show()
 
-# Graficar soluciones clave
-plot_flows(pareto_solutions[min_cost_idx], "Mínimo Costo")
-plot_flows(pareto_solutions[min_emissions_idx], "Mínimas Emisiones")
-plot_flows(pareto_solutions[max_flow_idx], "Máximo Flujo")
+# Encontrar soluciones extremas y representativas
+if len(pareto_flows) > 0:
+    # Soluciones extremas
+    min_cost_idx = np.argmin(pareto_costs)
+    min_emissions_idx = np.argmin(pareto_emissions)
+    max_flow_idx = np.argmax(pareto_flows)
+    
+    # Solución balanceada (punto medio)
+    normalized = (objectives[pareto_mask] - objectives[pareto_mask].min(axis=0)) / \
+                (objectives[pareto_mask].max(axis=0) - objectives[pareto_mask].min(axis=0))
+    balanced_idx = np.argmin(np.linalg.norm(normalized - 0.5, axis=1))
+    
+    # Análisis de soluciones
+    print_solution_stats(solutions[pareto_mask][min_cost_idx], "Mínimo Costo")
+    plot_composition(solutions[pareto_mask][min_cost_idx], "Mínimo Costo")
+    
+    print_solution_stats(solutions[pareto_mask][min_emissions_idx], "Mínimas Emisiones")
+    plot_composition(solutions[pareto_mask][min_emissions_idx], "Mínimas Emisiones")
+    
+    print_solution_stats(solutions[pareto_mask][max_flow_idx], "Máximo Flujo")
+    plot_composition(solutions[pareto_mask][max_flow_idx], "Máximo Flujo")
+    
+    print_solution_stats(solutions[pareto_mask][balanced_idx], "Solución Balanceada")
+    plot_composition(solutions[pareto_mask][balanced_idx], "Solución Balanceada")
+    
+    # Tabla comparativa
+    print("\n" + "="*60)
+    print("COMPARATIVA DE SOLUCIONES CLAVE")
+    print("="*60)
+    print(f"{'':<20} | {'Flujo (kg)':>15} | {'Costo (COP)':>15} | {'Emisiones (kg CO₂)':>20}")
+    print("-"*80)
+    print(f"{'Mínimo Costo':<20} | {pareto_costs[min_cost_idx]:>15,.0f} | {pareto_costs[min_cost_idx]:>15,.0f} | {pareto_emissions[min_cost_idx]:>20,.0f}")
+    print(f"{'Mínimas Emisiones':<20} | {pareto_flows[min_emissions_idx]:>15,.0f} | {pareto_costs[min_emissions_idx]:>15,.0f} | {pareto_emissions[min_emissions_idx]:>20,.0f}")
+    print(f"{'Máximo Flujo':<20} | {pareto_flows[max_flow_idx]:>15,.0f} | {pareto_costs[max_flow_idx]:>15,.0f} | {pareto_emissions[max_flow_idx]:>20,.0f}")
+    print(f"{'Solución Balanceada':<20} | {pareto_flows[balanced_idx]:>15,.0f} | {pareto_costs[balanced_idx]:>15,.0f} | {pareto_emissions[balanced_idx]:>20,.0f}")
+else:
+    print("\nNo se encontraron soluciones Pareto-eficientes para analizar")
+
+# =============================
+# 8. VISUALIZACIÓN DE FLUJOS (Mejorada)
+# =============================
+def plot_flows(x, title):
+    """Visualiza los flujos óptimos con más detalle"""
+    flows = x.reshape((3, 2, 3))
+    fig, ax = plt.subplots(2, 3, figsize=(18, 12))
+    
+    productos = ['Plástico', 'Textil', 'Papel']
+    fuentes = ['Medellín', 'Cali', 'Bogotá']
+    destinos = ['Ibagué', 'Macaeo']
+    colores = ['#FF6B6B', '#4ECDC4', '#FFD166']
+    
+    # Gráfico por producto y destino
+    for k in range(3):
+        for j in range(2):
+            ax[0, k].bar(fuentes, flows[:, j, k], bottom=(flows[:, j, k-1] if k>0 else 0),
+                        color=colores[j], label=destinos[j] if k==0 else "")
+            ax[0, k].set_title(f'Distribución de {productos[k]}')
+            ax[0, k].set_ylabel('Cantidad (kg)')
+            if k == 0:
+                ax[0, k].legend()
+            ax[0, k].grid(axis='y', alpha=0.5)
+    
+    # Gráfico por fuente y destino
+    for i in range(3):
+        for j in range(2):
+            ax[1, i].bar(productos, flows[i, j], color=colores[j],
+                        label=destinos[j] if i==0 else "")
+            ax[1, i].set_title(f'Aporte de {fuentes[i]}')
+            ax[1, i].set_ylabel('Cantidad (kg)')
+            if i == 0:
+                ax[1, i].legend()
+            ax[1, i].grid(axis='y', alpha=0.5)
+    
+    plt.suptitle(f'Distribución Detallada de Flujos - {title}', fontsize=16)
+    plt.tight_layout()
+    plt.savefig(f'flujos_detallados_{title.lower().replace(" ", "_")}.png', dpi=300)
+    plt.show()
+
+# Graficar soluciones clave si existen
+if len(pareto_flows) > 0:
+    plot_flows(solutions[pareto_mask][min_cost_idx], "Mínimo Costo")
+    plot_flows(solutions[pareto_mask][min_emissions_idx], "Mínimas Emisiones")
+    plot_flows(solutions[pareto_mask][max_flow_idx], "Máximo Flujo")
+    plot_flows(solutions[pareto_mask][balanced_idx], "Solución Balanceada")
