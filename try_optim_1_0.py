@@ -226,49 +226,69 @@ print(f"Emisiones mínimas: {np.min(pareto_emissions):,.2f} kg CO2")
 print(f"Emisiones máximas: {np.max(pareto_emissions):,.2f} kg CO2")
 
 # =============================
-# 6. VISUALIZACIÓN DE RESULTADOS
+# 6. VISUALIZACIÓN DE TODAS LAS SOLUCIONES (ANTES DE FILTRAR)
 # =============================
-# 6.1. Frente de Pareto 3D
+print("\nVISUALIZANDO TODAS LAS SOLUCIONES OBTENIDAS (ANTES DE FILTRAR PARETO)")
+
+# 6.1. Gráfico 3D de todas las soluciones
 fig = plt.figure(figsize=(12, 9))
 ax = fig.add_subplot(111, projection='3d')
-sc = ax.scatter(pareto_flows, pareto_costs, pareto_emissions, 
-                c=pareto_emissions, cmap='viridis', s=50)
+
+# Graficar todas las soluciones (no filtradas)
+sc_all = ax.scatter(flows, costs, emissions, 
+                c='gray', alpha=0.5, s=30, 
+                label='Todas las soluciones')
+
+# Graficar soluciones Pareto-eficientes (si existen)
+if len(pareto_flows) > 0:
+    sc_pareto = ax.scatter(pareto_flows, pareto_costs, pareto_emissions, 
+                        c='blue', s=50, 
+                        label='Soluciones Pareto-eficientes')
 
 ax.set_xlabel('Flujo Total (kg)', fontsize=12)
 ax.set_ylabel('Costo Total (COP)', fontsize=12)
 ax.set_zlabel('Emisiones CO₂ (kg)', fontsize=12)
-ax.set_title('Frente de Pareto - Soluciones Óptimas', fontsize=14)
-fig.colorbar(sc, label='Emisiones CO₂ (kg)')
+ax.set_title('Todas las Soluciones Obtenidas', fontsize=14)
+ax.legend()
 plt.tight_layout()
-plt.savefig('pareto_front_3d.png', dpi=300)
+plt.savefig('todas_soluciones_3d.png', dpi=300)
 plt.show()
 
-# 6.2. Proyecciones 2D
+# 6.2. Proyecciones 2D de todas las soluciones
 fig, ax = plt.subplots(1, 3, figsize=(18, 6))
 
-# Flujo vs Costo
-ax[0].scatter(pareto_flows, pareto_costs, c='green', alpha=0.7)
+# Flujo vs Costo (todas las soluciones)
+ax[0].scatter(flows, costs, c='gray', alpha=0.5, s=30, label='Todas')
+if len(pareto_flows) > 0:
+    ax[0].scatter(pareto_flows, pareto_costs, c='blue', s=40, label='Pareto')
 ax[0].set_xlabel('Flujo Total (kg)')
 ax[0].set_ylabel('Costo Total (COP)')
-ax[0].set_title('Compromiso Flujo-Costo')
+ax[0].set_title('Flujo vs Costo (Todas las soluciones)')
 ax[0].grid(True)
+ax[0].legend()
 
-# Flujo vs Emisiones
-ax[1].scatter(pareto_flows, pareto_emissions, c='red', alpha=0.7)
+# Flujo vs Emisiones (todas las soluciones)
+ax[1].scatter(flows, emissions, c='gray', alpha=0.5, s=30, label='Todas')
+if len(pareto_flows) > 0:
+    ax[1].scatter(pareto_flows, pareto_emissions, c='blue', s=40, label='Pareto')
 ax[1].set_xlabel('Flujo Total (kg)')
 ax[1].set_ylabel('Emisiones CO₂ (kg)')
-ax[1].set_title('Compromiso Flujo-Emisiones')
+ax[1].set_title('Flujo vs Emisiones (Todas las soluciones)')
 ax[1].grid(True)
+ax[1].legend()
 
-# Costo vs Emisiones
-ax[2].scatter(pareto_costs, pareto_emissions, c='blue', alpha=0.7)
+# Costo vs Emisiones (todas las soluciones)
+ax[2].scatter(costs, emissions, c='gray', alpha=0.5, s=30, label='Todas')
+if len(pareto_flows) > 0:
+    ax[2].scatter(pareto_costs, pareto_emissions, c='blue', s=40, label='Pareto')
 ax[2].set_xlabel('Costo Total (COP)')
 ax[2].set_ylabel('Emisiones CO₂ (kg)')
-ax[2].set_title('Compromiso Costo-Emisiones')
+ax[2].set_title('Costo vs Emisiones (Todas las soluciones)')
 ax[2].grid(True)
+ax[2].legend()
 
 plt.tight_layout()
-plt.savefig('pareto_front_2d.png', dpi=300)
+plt.savefig('todas_soluciones_2d.png', dpi=300)
 plt.show()
 
 # =============================
